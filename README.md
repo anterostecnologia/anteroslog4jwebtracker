@@ -61,3 +61,15 @@ Para configurar o Web Tracker, no arquivo `WEB-INF/web.xml` é necessário adici
 No exemplo, a ferramenta foi mapeada como `/tracker/*`, portanto, se o aplicativo estiver acessível em [http://localhost:8080/myapp](http://localhost:8080/myapp), a URL para acessar o tracker é:
 
 [http://localhost:8080/myapp/tracker](http://localhost:8080/myapp/tracker)
+
+
+## Licença ##
+
+Apache 2.0
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+
+<center>
+![alt text](https://avatars0.githubusercontent.com/u/16067889?v=3&u=ab2eb482a16fd90a17d7ce711885f0bdc0640997&s=64)  
+Anteros Tecnologia
