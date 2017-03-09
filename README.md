@@ -6,7 +6,11 @@ O **Anteros Log4j Web Tracker** é uma ferramenta web _open source_ baseada no [
 
 Na primeira aba (_**Configuração**_) você pode alterar os níveis de log da aplicação, incluindo o log do nível `root`. As alterações são aplicadas no momento, mas não alteram as configurações originais do arquivo `log4j.properties`, `log4j.xml` ou qualquer outro arquivo de configuração. Se você reinicar a aplicação, as configurações originais serão aplicadas novamente.
 
+![Configuração](screenshots/anteros_log4j_configuracao.png)
+
 Na segunda aba (_**Log**_), você pode selecionar o arquivo do log, configurar a quantidade de linhas, selecionar se quer atualizar o log automaticamente após *5 segundos* e visualizar o log ou fazer download do mesmo.
+
+![Log](screenshots/anteros_log4j_log.png)
 
 
 ## Configuração do Anteros Log4j Web Tracker
@@ -61,7 +65,6 @@ Para configurar o Web Tracker, no arquivo `WEB-INF/web.xml` é necessário adici
 No exemplo, a ferramenta foi mapeada como `/tracker/*`, portanto, se o aplicativo estiver acessível em [http://localhost:8080/myapp](http://localhost:8080/myapp), a URL para acessar o tracker é:
 
 [http://localhost:8080/myapp/tracker](http://localhost:8080/myapp/tracker)
-
 
 ## Licença ##
 
