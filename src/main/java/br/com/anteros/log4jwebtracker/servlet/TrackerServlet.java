@@ -1,12 +1,23 @@
 package br.com.anteros.log4jwebtracker.servlet;
 
+import java.io.BufferedInputStream;
+import java.io.BufferedWriter;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.RandomAccessFile;
+import java.io.StringBufferInputStream;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.ResultSet;
+import java.sql.Statement;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Date;
 import java.util.Enumeration;
 import java.util.List;
 
@@ -15,11 +26,16 @@ import javax.servlet.ServletOutputStream;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+import javax.swing.JButton;
 
+import org.apache.log4j.Appender;
 import org.apache.log4j.FileAppender;
+import org.apache.log4j.Layout;
 import org.apache.log4j.Level;
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
+import org.apache.log4j.jdbc.JDBCAppender;
+import org.apache.log4j.spi.LoggingEvent;
 
 import br.com.anteros.log4jwebtracker.io.StreamUtils;
 import br.com.anteros.log4jwebtracker.logging.LoggingUtils;
@@ -95,7 +111,7 @@ public class TrackerServlet extends HttpServlet {
 	private void doResource(
 			HttpServletRequest request, HttpServletResponse response,
 			byte[] buffer, String contentType)
-			throws ServletException, IOException {
+					throws ServletException, IOException {
 		ServletOutputStream output = response.getOutputStream();
 		response.setContentType(contentType);
 		response.setContentLength(buffer.length);
@@ -107,7 +123,7 @@ public class TrackerServlet extends HttpServlet {
 	private void doPage(
 			HttpServletRequest request, HttpServletResponse response,
 			String action, String baseAction)
-			throws ServletException, IOException {
+					throws ServletException, IOException {
 		request.setAttribute("action", action);
 		request.setAttribute("baseAction", baseAction);
 		if (request.getPathInfo().equals("/log")) {
@@ -123,7 +139,7 @@ public class TrackerServlet extends HttpServlet {
 	private void doConfiguration(
 			HttpServletRequest request, HttpServletResponse response,
 			String action, String baseAction)
-			throws ServletException, IOException {
+					throws ServletException, IOException {
 		List loggers = LoggingUtils.getLoggers();
 		request.setAttribute("loggers", loggers);
 		Enumeration e = request.getParameterNames();
@@ -162,8 +178,8 @@ public class TrackerServlet extends HttpServlet {
 	private void doLog(
 			HttpServletRequest request, HttpServletResponse response,
 			String action, String baseAction)
-			throws ServletException, IOException {
-		request.setAttribute("fileAppenders", LoggingUtils.getFileAppenders());
+					throws ServletException, IOException {
+		request.setAttribute("appenders", LoggingUtils.getAppenders());
 		// getServletConfig().getServletContext()
 		// .getRequestDispatcher("/tracker.jsp")
 		// .forward(request, response);
@@ -172,7 +188,7 @@ public class TrackerServlet extends HttpServlet {
 
 	private void doTailLog(HttpServletRequest request,
 			HttpServletResponse response, String action, String baseAction)
-			throws ServletException, IOException {
+					throws ServletException, IOException {
 		String appenderName = request.getParameter("appender");
 		if (appenderName != null) {
 			int lines = 20;
@@ -184,72 +200,170 @@ public class TrackerServlet extends HttpServlet {
 							+ request.getParameter("lines"));
 				}
 			}
-			FileAppender fileAppender = LoggingUtils.getFileAppender(appenderName);
-			if (fileAppender != null) {
+			Appender appender = LoggingUtils.getAppender(appenderName);
+			if (appender != null) {
 				OutputStream output = response.getOutputStream();
-				try {
-					String contentType = "text/plain";
-					if (fileAppender.getEncoding() != null) {
-						contentType += "; charset=" + fileAppender.getEncoding();
+				if (appender instanceof FileAppender) {
+					FileAppender fileAppender = (FileAppender) appender;
+					try {
+						String contentType = "text/plain";
+						if (fileAppender.getEncoding() != null) {
+							contentType += "; charset=" + fileAppender.getEncoding();
+						}
+						response.setContentType(contentType);
+						response.setHeader("Cache-Control", "no-cache"); // HTTP 1.1
+						response.setHeader("Pragma", "no-cache"); // HTTP 1.0
+						response.setDateHeader("Expires", -1); // prevents caching
+						RandomAccessFile inputFile = new RandomAccessFile(fileAppender.getFile(), "r");
+						StreamUtils.tailFile(inputFile, output, BUFFER_SIZE, lines);
+						inputFile.close();
+					} catch (IOException e) {
+						logger.error("Error getting the file appender="
+								+ fileAppender.getFile(), e);
+						output.write("TrackerError: Check the log manually.".getBytes());
 					}
-					response.setContentType(contentType);
-					response.setHeader("Cache-Control", "no-cache"); // HTTP 1.1
-					response.setHeader("Pragma", "no-cache"); // HTTP 1.0
-					response.setDateHeader("Expires", -1); // prevents caching
-					RandomAccessFile inputFile = new RandomAccessFile(fileAppender.getFile(), "r");
-					StreamUtils.tailFile(inputFile, output, BUFFER_SIZE, lines);
-					inputFile.close();
-				} catch (IOException e) {
-					logger.error("Error getting the file appender="
-							+ fileAppender.getFile(), e);
-					output.write("TrackerError: Check the log manually.".getBytes());
+				} else if (appender instanceof JDBCAppender) {
+					JDBCAppender jdbcAppender = (JDBCAppender) appender;
+					try {
+						String url = jdbcAppender.getURL();							
+						String sql = jdbcAppender.getSql() + " LIMIT " + (lines > 0 ? lines : 0);
+
+						Connection con = DriverManager.getConnection(url, jdbcAppender.getUser(), jdbcAppender.getPassword());
+						Statement stmt = con.createStatement();
+						ResultSet res = stmt.executeQuery(sql);
+						
+						Date date;
+						String logger, level, message; 
+						List<String> dadosTabela = new ArrayList<String>();
+
+						while (res.next()) {
+							date = res.getTimestamp("DATELOG");
+							logger = res.getString("LOGGERCLASS"); 
+							level = res.getString("LEVELLOG");
+							message = res.getString("MESSAGE");
+							dadosTabela.add(date +  "   " + level + " -  " + message);
+						}
+
+						String contentType = "text/plain" + "; charset=utf-8";
+						response.setContentType(contentType);
+						response.setHeader("Cache-Control", "no-cache"); // HTTP  1.1
+						response.setHeader("Pragma", "no-cache"); // HTTP 1.0
+						response.setDateHeader("Expires", -1); // prevents caching
+
+						for (String d : dadosTabela) {
+							output.write((d + "\n").getBytes());
+							output.flush();
+						}						
+						con.close();
+					} catch (Exception e) {
+						logger.error("Error getting the jdbc appender="
+								+ jdbcAppender.getName(), e);
+						output.write("TrackerError: Check the log manually.".getBytes());
+					}
 				}
 				output.flush();
 				output.close();
 			} else {
-				logger.error("FileAppender with name=" + appenderName + " not exist.");
+				logger.error("Appender with name=" + appenderName + " not exist.");
 			}
-		} else {
+		} else
+
+		{
 			logger.error("No appender name parameter specified.");
 		}
 	}
 
 	private void doGetLog(HttpServletRequest request,
 			HttpServletResponse response, String action, String baseAction)
-			throws ServletException, IOException {
+					throws ServletException, IOException {
 		String appenderName = request.getParameter("appender");
 		if (appenderName != null) {
-			FileAppender fileAppender = LoggingUtils.getFileAppender(appenderName);
-			if (fileAppender != null) {
-				File file = new File(fileAppender.getFile());
+			Appender appender = LoggingUtils.getAppender(appenderName);
+			if (appender != null) {
 				OutputStream output = response.getOutputStream();
-				try {
-					String contentType = "text/plain";
-					if (fileAppender.getEncoding() != null) {
-						contentType += "; charset=" + fileAppender.getEncoding();
+				if (appender instanceof FileAppender) {
+					FileAppender fileAppender = (FileAppender) appender;
+					try {
+						File file = new File(fileAppender.getFile());
+						String contentType = "text/plain";
+						if (fileAppender.getEncoding() != null) {
+							contentType += "; charset=" + fileAppender.getEncoding();
+						}
+						response.setContentType(contentType);
+						response.setContentLength((int) file.length());
+						response.setHeader("Cache-Control", "no-cache"); // HTTP 1.1
+						response.setHeader("Pragma", "no-cache"); // HTTP 1.0
+						response.setDateHeader("Expires", -1); // prevents caching
+						response.setHeader("Content-Disposition",
+								"attachment; filename=\""
+										+ file.getName() + "\"");
+						InputStream fileStream = new FileInputStream(fileAppender.getFile());
+						StreamUtils.readStream(fileStream, output, BUFFER_SIZE);
+						fileStream.close();
+					} catch (IOException e) {
+						response.setHeader("Content-Disposition", "");
+						logger.error("Error getting the file appender="
+								+ fileAppender.getFile(), e);
+						output.write("TrackerError: Check the log manually.".getBytes());
+						output.close();
 					}
-					response.setContentType(contentType);
-					response.setContentLength((int) file.length());
-					response.setHeader("Cache-Control", "no-cache"); // HTTP 1.1
-					response.setHeader("Pragma", "no-cache"); // HTTP 1.0
-					response.setDateHeader("Expires", -1); // prevents caching
-					response.setHeader("Content-Disposition",
-							"attachment; filename=\""
-									+ file.getName() + "\"");
-					InputStream fileStream = new FileInputStream(fileAppender.getFile());
-					StreamUtils.readStream(fileStream, output, BUFFER_SIZE);
-					fileStream.close();
-				} catch (IOException e) {
-					response.setHeader("Content-Disposition", "");
-					logger.error("Error getting the file appender="
-							+ fileAppender.getFile(), e);
-					output.write("TrackerError: Check the log manually.".getBytes());
-					output.close();
+				} else if (appender instanceof JDBCAppender) {
+					JDBCAppender jdbcAppender = (JDBCAppender) appender;
+					try {
+						File file = new File(jdbcAppender.getName());	
+						BufferedWriter bwfileStream = new BufferedWriter(new FileWriter(file));
+						
+						String url = jdbcAppender.getURL();							
+						String sql = jdbcAppender.getSql();
+
+						Connection con = DriverManager.getConnection(url, jdbcAppender.getUser(), jdbcAppender.getPassword());
+						Statement stmt = con.createStatement();
+						ResultSet res = stmt.executeQuery(sql);
+
+						Date date;
+						String logger, level, message; 
+						List<String> dadosTabela = new ArrayList<String>();
+
+						while (res.next()) {
+							date = res.getTimestamp("DATELOG");
+							logger = res.getString("LOGGERCLASS"); 
+							level = res.getString("LEVELLOG");
+							message = res.getString("MESSAGE");
+							dadosTabela.add(date +  "   " + level + " -  " + message);
+						}		
+
+						for (String d : dadosTabela) {
+							bwfileStream.write(d);
+							bwfileStream.newLine();
+						}					
+						con.close();
+						bwfileStream.close();	
+
+						String contentType = "text/plain" + "; charset=utf-8";
+						response.setContentType(contentType);
+						response.setContentLength((int) file.length());
+						response.setHeader("Cache-Control", "no-cache"); // HTTP 1.1
+						response.setHeader("Pragma", "no-cache"); // HTTP 1.0
+						response.setDateHeader("Expires", -1); // prevents caching
+						response.setHeader("Content-Disposition",
+								"attachment; filename=\""
+										+ file.getName() + "\"");		
+
+						InputStream fileStream = new FileInputStream(file);
+						StreamUtils.readStream(fileStream, output, BUFFER_SIZE);
+						fileStream.close();
+					} catch (Exception e) {
+						response.setHeader("Content-Disposition", "");
+						logger.error("Error getting the jdbc appender="
+								+ jdbcAppender.getName(), e);
+						output.write("TrackerError: Check the log manually.".getBytes());
+						output.close();
+					}
 				}
 				output.flush();
 				output.close();
 			} else {
-				logger.error("FileAppender with name=" + appenderName + " not exist.");
+				logger.error("Appender with name=" + appenderName + " not exist.");
 			}
 		} else {
 			logger.error("No appender name parameter specified.");
@@ -313,7 +427,8 @@ public class TrackerServlet extends HttpServlet {
 		out.print("				<a href=\"");
 		out.print((String) request.getAttribute("baseAction"));
 		out.println("\">");
-		out.print("					<img border=\"0\" alt=\"Anteros Log4j Web Tracker\" title=\"Anteros Log4j Web Tracker\" src=\"");
+		out.print(
+				"					<img border=\"0\" alt=\"Anteros Log4j Web Tracker\" title=\"Anteros Log4j Web Tracker\" src=\"");
 		out.print((String) request.getAttribute("baseAction"));
 		out.println("/img/anteros_logo.png\" height=\"161\">");
 		out.println("				</a>");
@@ -348,7 +463,8 @@ public class TrackerServlet extends HttpServlet {
 			out.println("							<p>Filtro</p>");
 			out.println("						</div>");
 			out.println("						<div id=\"filterInputContainer\">");
-			out.println("							<input type=\"text\" id=\"filter\" name=\"filter\" placeholder=\"Insira o nome do pacote ou parte dele\" spellcheck=\"false\"/>");
+			out.println(
+					"							<input type=\"text\" id=\"filter\" name=\"filter\" placeholder=\"Insira o nome do pacote ou parte dele\" spellcheck=\"false\"/>");
 			out.println("						</div>");
 			out.println("					</div>");
 			out.println("					<div class=\"clear\"></div>");
@@ -380,7 +496,6 @@ public class TrackerServlet extends HttpServlet {
 				out.print((String) request.getAttribute("baseAction"));
 				out.println("/config\" method=\"post\">");
 				out.print("											<select class=\"select conf\" id=\"");
-				out.print(logger.getName());
 				out.print("\" name=\"");
 				out.print(logger.getName());
 				out.println("\">");
@@ -439,11 +554,13 @@ public class TrackerServlet extends HttpServlet {
 			out.println("						<div style=\"float: left;\">");
 			out.println("							<div>");
 			out.println("								<input id=\"wrapCheck\" type=\"checkbox\">");
-			out.println("								<label id=\"wrapLabel\" for=\"wrapCheck\">Não quebrar a linha do log</label>");
+			out.println(
+					"								<label id=\"wrapLabel\" for=\"wrapCheck\">Não quebrar a linha do log</label>");
 			out.println("							</div>");
 			out.println("							<div>");
 			out.println("								<input id=\"refreshCheck\" type=\"checkbox\">");
-			out.println("								<label id=\"refreshLabel\" for=\"refreshCheck\">Atualizar automático</label>");
+			out.println(
+					"								<label id=\"refreshLabel\" for=\"refreshCheck\">Atualizar automático</label>");
 			out.println("							</div>");
 			out.println("						</div>");
 			out.print("						<form action=\"");
@@ -452,14 +569,17 @@ public class TrackerServlet extends HttpServlet {
 			out.println("							<div id=\"parent\" style=\"float: right;\">");
 			out.println("								<div class=\"childs\">");
 			out.println("									<div>");
-			out.println("										<label class=\"label\" for=\"appender\">Arquivo</label>");
+			out.println(
+					"										<label class=\"label\" for=\"appender\">Arquivo</label>");
 			out.println("									</div>");
-			out.println("									<select class=\"select\" id=\"appender\" name=\"appender\">");
+			out.println(
+					"									<select class=\"select\" id=\"appender\" name=\"appender\">");
 
-			List fileAppenders = (List) request.getAttribute("fileAppenders");
-			for (int i = 0; i < fileAppenders.size(); i++) {
-				FileAppender fap = (FileAppender) fileAppenders.get(i);
-
+			List<Appender> appenders = (List<Appender>) request.getAttribute("appenders");
+			for (int i = 0; i < appenders.size(); i++) {
+				Appender fap = appenders.get(i);
+				// aqui também
+				// mas acho que aqui já foi
 				out.print("										<option value=\"");
 				out.print(fap.getName());
 				out.print("\">");
@@ -470,13 +590,17 @@ public class TrackerServlet extends HttpServlet {
 			out.println("								</div>");
 			out.println("								<div class=\"childs\">");
 			out.println("									<div>");
-			out.println("										<label class=\"label\" for=\"lines\">Qtde. linhas</label>");
+			out.println(
+					"										<label class=\"label\" for=\"lines\">Qtde. linhas</label>");
 			out.println("									</div>");
-			out.println("									<input type=\"number\" id=\"lines\" name=\"lines\" value=\"20\" size=\"4\" style=\"margin-right: 5px;\" />");
+			out.println(
+					"									<input type=\"number\" id=\"lines\" name=\"lines\" value=\"20\" size=\"4\" style=\"margin-right: 5px;\" />");
 			out.println("								</div>");
 			out.println("								<div class=\"childs\">");
-			out.println("									<button type=\"button\" class=\"btn\" id=\"refresh\">Atualizar</button>");
-			out.println("									<button type=\"submit\" class=\"btn green\" id=\"download\">Download</button>");
+			out.println(
+					"									<button type=\"button\" class=\"btn\" id=\"refresh\">Atualizar</button>");
+			out.println(
+					"									<button type=\"submit\" class=\"btn green\" id=\"download\">Download</button>");
 			out.println("								</div>");
 			out.println("							</div>");
 			out.println("						</form>");
@@ -499,7 +623,8 @@ public class TrackerServlet extends HttpServlet {
 		out.println("				<span>Copyright ");
 		out.println("					<script>document.write(new Date().getFullYear())</script>");
 		out.println("					&nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp;<i>Distribuído por &nbsp;</i>");
-		out.println("					<a href=\"http://www.anteros.com.br\" target=\"_blank\">Anteros Tecnologia</a>");
+		out.println(
+				"					<a href=\"http://www.anteros.com.br\" target=\"_blank\">Anteros Tecnologia</a>");
 		out.println("				</span>");
 		out.println("			</div>");
 		out.println("		</div>");
@@ -571,4 +696,5 @@ public class TrackerServlet extends HttpServlet {
 		StreamUtils.readStream(input, output, BUFFER_SIZE);
 		return output.toByteArray();
 	}
+
 }

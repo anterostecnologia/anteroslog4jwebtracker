@@ -11,6 +11,7 @@ import org.apache.log4j.Appender;
 import org.apache.log4j.FileAppender;
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
+import org.apache.log4j.jdbc.JDBCAppender;
 
 
 /**
@@ -20,24 +21,24 @@ import org.apache.log4j.Logger;
  */
 public abstract class LoggingUtils {
 
-	static synchronized public List getFileAppenders() {
-		List list = new ArrayList();
-		Enumeration e = LogManager.getRootLogger().getAllAppenders();
+	static synchronized public List<Appender> getAppenders() {
+		List<Appender> list = new ArrayList<Appender>();
+		Enumeration<Appender> e = LogManager.getRootLogger().getAllAppenders();
 		while(e.hasMoreElements()) {
-			Appender a = (Appender) e.nextElement();
-			if(a instanceof FileAppender) {
+			Appender a = e.nextElement();
+			if((a instanceof FileAppender) || (a instanceof JDBCAppender)) {
 				list.add(a);
 			}
 		}
 		return list;
 	}
 
-	static synchronized public FileAppender getFileAppender(String appenderName) {
-		Enumeration e = LogManager.getRootLogger().getAllAppenders();
+	static synchronized public Appender getAppender(String appenderName) {
+		Enumeration<Appender> e = LogManager.getRootLogger().getAllAppenders();
 		while(e.hasMoreElements()) {
-			Appender a = (Appender) e.nextElement();
-			if(a instanceof FileAppender && a.getName().equals(appenderName)) {
-				return (FileAppender) a;
+			Appender a = e.nextElement();
+			if((a instanceof FileAppender) || (a instanceof JDBCAppender)) {
+				return a;
 			}
 		}
 		return null;
