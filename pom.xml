@@ -4,7 +4,7 @@
 	<groupId>br.com.anteros</groupId>
 	<artifactId>Anteros-Log4j-Web-Tracker</artifactId>
 	<packaging>jar</packaging>
-	<version>1.0.2</version>
+	<version>1.0.3</version>
 
 	<properties>
 		<java.versao>1.6</java.versao>
