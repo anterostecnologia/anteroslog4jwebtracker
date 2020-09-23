@@ -4,7 +4,7 @@
 	<groupId>br.com.anteros</groupId>
 	<artifactId>Anteros-Log4j-Web-Tracker</artifactId>
 	<packaging>jar</packaging>
-	<version>1.0.4</version>
+	<version>1.0.5</version>
 
 	<properties>
 		<java.versao>1.8</java.versao>
@@ -85,17 +85,7 @@
 				<enabled>true</enabled>
 				<updatePolicy>always</updatePolicy>
 			</snapshots>
-		</repository>
-		<repository>
-			<id>local-REPO</id>
-			<url>http://vps4657.publiccloud.com.br:8082/artifactory/libs-release/</url>
-			<releases>
-				<enabled>true</enabled>
-			</releases>
-			<snapshots>
-				<enabled>false</enabled>
-			</snapshots>
-		</repository>
+		</repository>		
 	</repositories>
 
 	<profiles>
@@ -328,12 +318,7 @@
 				</pluginManagement>
 			</build>
 
-			<distributionManagement>
-				<repository>
-					<id>local-REPO</id>
-					<url>http://vps4657.publiccloud.com.br:8082/artifactory/libs-release-local</url>
-				</repository>
-			</distributionManagement>
+			
 		</profile>
 	</profiles>
 </project>
