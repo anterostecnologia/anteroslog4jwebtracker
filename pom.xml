@@ -1,10 +1,11 @@
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
 	<modelVersion>4.0.0</modelVersion>
 	<groupId>br.com.anteros</groupId>
 	<artifactId>Anteros-Log4j-Web-Tracker</artifactId>
 	<packaging>jar</packaging>
-	<version>1.0.5</version>
+	<version>1.0.6</version>
 
 	<properties>
 		<java.versao>1.8</java.versao>
@@ -77,7 +78,7 @@
 	</dependencies>
 
 	<repositories>
-		<repository>
+	<repository>
 			<id>oss-snapshots-repo</id>
 			<name>Sonatype OSS Maven Repository</name>
 			<url>https://oss.sonatype.org/content/groups/public</url>
@@ -85,8 +86,31 @@
 				<enabled>true</enabled>
 				<updatePolicy>always</updatePolicy>
 			</snapshots>
-		</repository>		
+		</repository>
+		<repository>
+			<id>local-REPO</id>
+			<url>http://vps4657.publiccloud.com.br:8082/artifactory/libs-release-local</url>
+			<releases>
+				<enabled>false</enabled>
+			</releases>
+			<snapshots>
+				<enabled>false</enabled>
+			</snapshots>
+		</repository>
 	</repositories>
+
+	<pluginRepositories>
+		<pluginRepository>
+			<id>local-REPO</id>
+			<url>http://vps4657.publiccloud.com.br:8082/artifactory/libs-release-local</url>
+			<releases>
+				<enabled>false</enabled>
+			</releases>
+			<snapshots>
+				<enabled>false</enabled>
+			</snapshots>
+		</pluginRepository>
+	</pluginRepositories>
 
 	<profiles>
 		<profile>
@@ -226,7 +250,7 @@
 					</plugins>
 				</pluginManagement>
 			</build>
-			
+
 			<distributionManagement>
 				<repository>
 					<id>bintray-REPO-deploy</id>
@@ -245,7 +269,7 @@
 						<enabled>false</enabled>
 					</snapshots>
 				</repository>
-			
+
 				<repository>
 					<id>spring-repo</id>
 					<name>Spring Repository</name>
@@ -318,7 +342,7 @@
 				</pluginManagement>
 			</build>
 
-			
+
 		</profile>
 	</profiles>
 </project>
